@@ -291,7 +291,7 @@ export default function AdminExamFormPage() {
       </h1>
 
       {/* Steps indicator */}
-      <div className="mt-6 flex items-center gap-4">
+      <div className="mt-6 flex flex-wrap items-center gap-3 sm:gap-4">
         <button
           onClick={() => setStep(1)}
           className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-colors ${
@@ -300,7 +300,7 @@ export default function AdminExamFormPage() {
         >
           1️⃣ بيانات الاختبار
         </button>
-        <div className="h-px w-8 bg-navy/20" />
+        <div className="hidden h-px w-8 bg-navy/20 sm:block" />
         <button
           onClick={() => setStep(2)}
           className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-colors ${
@@ -309,7 +309,7 @@ export default function AdminExamFormPage() {
         >
           2️⃣ الأسئلة ({questions.length})
         </button>
-        <div className="h-px w-8 bg-navy/20" />
+        <div className="hidden h-px w-8 bg-navy/20 sm:block" />
         <div className="rounded-xl bg-navy/5 px-4 py-2 text-sm font-bold text-navy">
           🎯 الدرجة النهائية: {totalScore} درجة
         </div>
@@ -349,7 +349,7 @@ export default function AdminExamFormPage() {
 
             <div>
               <label className="mb-1.5 block text-sm font-bold text-navy">المرحلة *</label>
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-3">
                 {Object.values(STAGES).map((s) => (
                   <button
                     key={s.key}
@@ -555,21 +555,21 @@ export default function AdminExamFormPage() {
             ➕ إضافة سؤال جديد
           </button>
 
-          <div className="mt-6 flex items-center justify-between">
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
             <button
               onClick={() => setStep(1)}
               className="rounded-2xl border-2 border-navy/20 px-6 py-3 text-sm font-bold text-navy transition-colors hover:bg-navy/5"
             >
               → السابق
             </button>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4">
               <span className="text-sm font-bold text-navy">
                 🎯 الدرجة النهائية: {totalScore} درجة
               </span>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="rounded-2xl bg-gradient-to-l from-success to-success/80 px-8 py-3 text-sm font-bold text-white shadow-lg shadow-success/30 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                className="rounded-2xl bg-gradient-to-l from-success to-success/80 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-success/30 transition-all hover:scale-105 active:scale-95 disabled:opacity-50 sm:px-8"
               >
                 {saving ? "جاري الحفظ..." : isEdit ? "💾 حفظ التعديلات" : "💾 حفظ الاختبار"}
               </button>

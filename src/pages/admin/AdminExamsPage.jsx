@@ -73,14 +73,14 @@ export default function AdminExamsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-extrabold text-navy">📝 الاختبارات</h1>
           <p className="mt-1 text-sm text-navy/60">إدارة جميع اختبارات المنصة</p>
         </div>
         <Link
           to="/admin/exams/new"
-          className="rounded-2xl bg-gradient-to-l from-primary to-purple px-6 py-3 text-sm font-bold text-white shadow-lg shadow-primary/30 transition-all hover:scale-105 active:scale-95"
+          className="rounded-2xl bg-gradient-to-l from-primary to-purple px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/30 transition-all hover:scale-105 active:scale-95 sm:px-6 sm:py-3"
         >
           ➕ إنشاء اختبار جديد
         </Link>
