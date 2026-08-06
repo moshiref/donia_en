@@ -56,7 +56,7 @@ export default function StudentHomePage() {
                   onClick={() => navigate(`/exams/${selectedStage}/${grade.key}`)}
                   className="group rounded-2xl border-2 border-white/60 bg-white/70 p-6 shadow-md backdrop-blur-lg transition-all hover:border-primary/40 hover:shadow-lg hover:scale-[1.02]"
                 >
-                  <span className="text-3xl">📚</span>
+                  <span className="text-3xl"></span>
                   <h3 className="mt-2 text-lg font-extrabold text-navy group-hover:text-primary">
                     {grade.label}
                   </h3>

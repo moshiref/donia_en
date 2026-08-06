@@ -116,9 +116,9 @@ export default function StudentExamResultPage() {
             )}
             {isFail && (
               <div className="rounded-2xl bg-error/10 p-4">
-                <p className="text-lg font-extrabold text-error">💪 لا تستسلم!</p>
+                <p className="text-lg font-extrabold text-error">راجع وذاكر درجتك مش كويسه</p>
                 <p className="mt-1 text-sm text-error/80">
-                  راجع الدروس وحاول مرة أخرى. أنت تستطيع! 📖
+                  راجع الدروس وحاول مرة أخرى. ! 📖
                 </p>
               </div>
             )}
@@ -127,7 +127,7 @@ export default function StudentExamResultPage() {
           {/* Details */}
           <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
             <div className="rounded-xl bg-navy/5 p-3">
-              <p className="text-xs text-navy/50">📚 الصف</p>
+              <p className="text-xs text-navy/50"> الصف</p>
               <p className="font-bold text-navy">{attempt.grade}</p>
             </div>
             <div className="rounded-xl bg-navy/5 p-3">
