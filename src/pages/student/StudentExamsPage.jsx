@@ -1,17 +1,29 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { fetchPublishedExams } from "../../lib/examService";
+import { Navigate, useParams, useNavigate } from "react-router-dom";
+import {
+  fetchPublishedExams,
+  fetchStudentAttemptMap,
+  getExamQuestionCount,
+} from "../../lib/examService";
 import { STAGES } from "../../data/stages";
+import { useStudentAuth } from "../../contexts/StudentAuthContext";
+import { getStudentAccess, getStudentExamsPath } from "../../lib/studentAccess";
 
 export default function StudentExamsPage() {
   const { stageId, gradeId } = useParams();
   const navigate = useNavigate();
+  const { student, isStudentLoggedIn } = useStudentAuth();
   const [exams, setExams] = useState([]);
+  const [attemptMap, setAttemptMap] = useState(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const stage = STAGES[stageId];
   const grade = stage?.grades.find((g) => g.key === gradeId);
+
+  // صلاحية الطالب المسجل: مرحلة وصف محددان من الإدارة فقط
+  const access = isStudentLoggedIn ? getStudentAccess(student) : null;
+  const studentExamsPath = isStudentLoggedIn ? getStudentExamsPath(student) : null;
 
   useEffect(() => {
     async function load() {
@@ -21,7 +33,13 @@ export default function StudentExamsPage() {
         return;
       }
       try {
-        const data = await fetchPublishedExams(stageId, grade.label);
+        let data = await fetchPublishedExams(stageId, grade.label);
+        // طبقة حماية إضافية: الطالب المسجل لا يرى إلا امتحانات نطاقه
+        if (isStudentLoggedIn && access?.allowed) {
+          data = data.filter(
+            (e) => e.stage === student.stage && e.grade === student.grade
+          );
+        }
         setExams(data);
       } catch (err) {
         setError("حدث خطأ أثناء تحميل الاختبارات");
@@ -31,7 +49,45 @@ export default function StudentExamsPage() {
       }
     }
     load();
-  }, [stageId, gradeId]);
+  }, [stageId, gradeId, isStudentLoggedIn, access?.allowed, student?.stage, student?.grade, stage, grade]);
+
+  // حالة محاولات الطالب على هذه الامتحانات (تم الأداء / جاري)
+  useEffect(() => {
+    if (!isStudentLoggedIn || !student?.id) return;
+    fetchStudentAttemptMap(student.id)
+      .then(setAttemptMap)
+      .catch((err) => console.error(err));
+  }, [isStudentLoggedIn, student?.id]);
+
+  // طالب مسجل بلا مرحلة/صف محددين → ممنوع
+  if (isStudentLoggedIn && !access.allowed) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary/5 via-white to-purple/5 px-4">
+        <div className="w-full max-w-md rounded-3xl border border-white/60 bg-white/70 p-10 text-center shadow-lg backdrop-blur-lg">
+          <span className="text-5xl">🔒</span>
+          <h2 className="mt-4 text-xl font-extrabold text-navy">غير مصرح</h2>
+          <p className="mt-2 text-sm text-navy/60">
+            راجعي مدرستك لتحديد المرحلة والصف الخاصين بك.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // محاولة وصول يدوي عبر URL لمرحلة/صف غير المسموح بها → تحويل إجباري لنطاقه
+  if (
+    isStudentLoggedIn &&
+    access.allowed &&
+    studentExamsPath &&
+    (stageId !== access.stageKey || gradeId !== access.grade.key)
+  ) {
+    return <Navigate to={studentExamsPath} replace />;
+  }
+
+  // طالب مسجل يفتح صف غير موجود في النظام → نفس التحويل
+  if (isStudentLoggedIn && access.allowed && (!stage || !grade)) {
+    return <Navigate to={studentExamsPath} replace />;
+  }
 
   if (loading) {
     return (
@@ -56,10 +112,10 @@ export default function StudentExamsPage() {
     <div className="min-h-screen bg-gradient-to-br from-primary/5 via-white to-purple/5 px-4 py-8">
       <div className="mx-auto max-w-2xl">
         <button
-          onClick={() => navigate("/")}
+          onClick={() => navigate(isStudentLoggedIn ? "/dashboard" : "/")}
           className="mb-4 text-sm font-bold text-primary hover:underline"
         >
-          → العودة للرئيسية
+          {isStudentLoggedIn ? "→ حسابي" : "→ العودة للرئيسية"}
         </button>
 
         <div className="text-center">
@@ -78,18 +134,37 @@ export default function StudentExamsPage() {
           </div>
         ) : (
           <div className="mt-6 flex flex-col gap-4">
-            {exams.map((exam) => (
+            {exams.map((exam) => {
+              const attemptStatus = attemptMap.get(exam.id);
+              const isAttempted =
+                attemptStatus === "submitted" ||
+                attemptStatus === "auto_submitted";
+              const isInProgress = attemptStatus === "in_progress";
+
+              return (
               <div
                 key={exam.id}
                 className="rounded-2xl border border-white/60 bg-white/70 p-6 shadow-md backdrop-blur-lg transition-all hover:shadow-lg"
               >
-                <h3 className="text-lg font-extrabold text-navy">📝 {exam.title}</h3>
+                <div className="flex items-start justify-between gap-2">
+                  <h3 className="text-lg font-extrabold text-navy">📝 {exam.title}</h3>
+                  {isAttempted && (
+                    <span className="shrink-0 rounded-full bg-success/15 px-3 py-1 text-xs font-bold text-success">
+                      ✅ تم الأداء
+                    </span>
+                  )}
+                  {isInProgress && (
+                    <span className="shrink-0 rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+                      ⏳ جاري
+                    </span>
+                  )}
+                </div>
                 {exam.description && (
                   <p className="mt-1 text-sm text-navy/60">{exam.description}</p>
                 )}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <span className="rounded-full bg-navy/10 px-3 py-1 text-xs font-bold text-navy">
-                    ❓ {exam.questions_count || 0} سؤال
+                    ❓ {getExamQuestionCount(exam)} سؤال
                   </span>
                   <span className="rounded-full bg-yellow/10 px-3 py-1 text-xs font-bold text-yellow-700">
                     🎯 {exam.total_score} درجة
@@ -100,12 +175,22 @@ export default function StudentExamsPage() {
                 </div>
                 <button
                   onClick={() => navigate(`/exam/${exam.id}/start`)}
-                  className="mt-4 w-full rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white shadow-md transition-all hover:bg-primary/90 hover:shadow-lg"
+                  disabled={isAttempted}
+                  className={`mt-4 w-full rounded-xl px-6 py-3 text-sm font-bold shadow-md transition-all ${
+                    isAttempted
+                      ? "cursor-not-allowed bg-navy/10 text-navy/40"
+                      : "bg-primary text-white hover:bg-primary/90 hover:shadow-lg"
+                  }`}
                 >
-                  🚀 ابدأ الاختبار
+                  {isAttempted
+                    ? "لقد قمت بأداء هذا الاختبار من قبل."
+                    : isInProgress
+                      ? "⏳ استكمال الاختبار"
+                      : "🚀 ابدأ الاختبار"}
                 </button>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

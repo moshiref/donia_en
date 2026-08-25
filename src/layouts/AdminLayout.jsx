@@ -4,6 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 
 const NAV_ITEMS = [
   { to: "/admin", icon: "🏠", label: "الرئيسية", end: true },
+  { to: "/admin/students", icon: "🎓", label: "إدارة الطلاب" },
   { to: "/admin/exams", icon: "📝", label: "الاختبارات" },
   { to: "/admin/exams/new", icon: "➕", label: "إنشاء اختبار" },
   { to: "/admin/results", icon: "👨‍🎓", label: "نتائج الطلاب" },

@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchDashboardStats, fetchExams, fetchAttempts } from "../../lib/examService";
+import {
+  fetchDashboardStats,
+  fetchExams,
+  fetchAttempts,
+  resetExamPlatformData,
+} from "../../lib/examService";
 
 const STATUS_MAP = {
   draft: { label: "مسودة", color: "bg-yellow/20 text-yellow-700", dot: "🟡" },
@@ -8,12 +13,21 @@ const STATUS_MAP = {
   stopped: { label: "متوقف", color: "bg-error/20 text-error-700", dot: "🔴" },
 };
 
+const CONFIRM_WORD = "DELETE";
+
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState(null);
   const [recentExams, setRecentExams] = useState([]);
   const [recentResults, setRecentResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // حالة محو بيانات المنصة
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState("");
+  const [resetSuccess, setResetSuccess] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -35,6 +49,45 @@ export default function AdminDashboardPage() {
     }
     load();
   }, []);
+
+  const loadDashboard = async () => {
+    try {
+      const [statsData, examsData, attemptsData] = await Promise.all([
+        fetchDashboardStats(),
+        fetchExams(),
+        fetchAttempts(),
+      ]);
+      setStats(statsData);
+      setRecentExams(examsData.slice(0, 5));
+      setRecentResults(attemptsData.slice(0, 5));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleResetConfirm = async () => {
+    if (confirmText.trim() !== CONFIRM_WORD || resetting) return;
+    setResetting(true);
+    setResetError("");
+    try {
+      const counts = await resetExamPlatformData();
+      console.log("🗑️ reset_exam_platform_data:", counts);
+      setShowResetModal(false);
+      setConfirmText("");
+      setResetSuccess("✅ تم محو بيانات المنصة بنجاح");
+      setTimeout(() => setResetSuccess(""), 6000);
+      await loadDashboard();
+    } catch (err) {
+      console.error(err);
+      setResetError(
+        err?.code === "UNAUTHORIZED"
+          ? "غير مصرح لك بهذه العملية."
+          : "تعذر محو البيانات. تأكدي من تنفيذ ملف reset_exam_platform_data.sql في Supabase ثم أعيدي المحاولة."
+      );
+    } finally {
+      setResetting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -144,6 +197,92 @@ export default function AdminDashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Danger Zone — للأدمن فقط */}
+      {resetSuccess && (
+        <div className="mt-6 rounded-2xl bg-success/10 p-4 text-center text-sm font-extrabold text-success">
+          {resetSuccess}
+        </div>
+      )}
+      <div className="mt-8 rounded-2xl border border-error/30 bg-error/5 p-6">
+        <h2 className="font-extrabold text-error">⚠️ منطقة الخطر</h2>
+        <p className="mt-1 text-sm text-navy/60">
+          محو جميع الطلاب والامتحانات والأسئلة والمحاولات والنتائج للبدء من الصفر. هذه العملية لا يمكن التراجع عنها.
+        </p>
+        <button
+          onClick={() => {
+            setShowResetModal(true);
+            setConfirmText("");
+            setResetError("");
+          }}
+          disabled={resetting}
+          className="mt-4 rounded-xl bg-error px-6 py-3 text-sm font-bold text-white shadow-md transition-colors hover:bg-error/90 disabled:opacity-50"
+        >
+          🗑️ محو بيانات المنصة
+        </button>
+      </div>
+
+      {/* Reset Confirmation Modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-8 shadow-2xl">
+            <div className="text-center">
+              <span className="text-5xl">⚠️</span>
+              <h2 className="mt-3 text-xl font-extrabold text-error">تحذير</h2>
+              <p className="mt-3 text-sm font-bold leading-relaxed text-navy/70">
+                أنت على وشك حذف جميع:
+              </p>
+              <ul className="mt-2 inline-flex flex-col items-start gap-1 text-sm font-bold text-navy/60">
+                <li>• الطلاب</li>
+                <li>• الامتحانات</li>
+                <li>• الأسئلة</li>
+                <li>• محاولات الطلاب</li>
+                <li>• النتائج</li>
+              </ul>
+              <p className="mt-3 text-sm font-extrabold text-error">
+                هذه العملية لا يمكن التراجع عنها.
+              </p>
+            </div>
+
+            <label htmlFor="reset-confirm" className="mt-5 block text-center text-xs font-bold text-navy/50">
+              اكتبي كلمة التأكيد لتفعيل الزر: <span dir="ltr" className="font-extrabold text-error">{CONFIRM_WORD}</span>
+            </label>
+            <input
+              id="reset-confirm"
+              type="text"
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              disabled={resetting}
+              dir="ltr"
+              autoComplete="off"
+              className="mt-2 w-full rounded-xl border-2 border-error/30 bg-white/90 px-4 py-3 text-center font-bold tracking-widest text-navy focus:border-error"
+            />
+
+            {resetError && (
+              <div className="mt-3 rounded-xl bg-error/10 px-4 py-3 text-center text-xs font-bold text-error">
+                {resetError}
+              </div>
+            )}
+
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => setShowResetModal(false)}
+                disabled={resetting}
+                className="flex-1 rounded-xl border-2 border-navy/20 px-4 py-3 text-sm font-bold text-navy transition-colors hover:bg-navy/5 disabled:opacity-50"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={handleResetConfirm}
+                disabled={confirmText.trim() !== CONFIRM_WORD || resetting}
+                className="flex-1 rounded-xl bg-error px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-error/90 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {resetting ? "جاري محو بيانات المنصة..." : "🗑️ نعم، محو جميع البيانات"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2,6 +2,11 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 import { fetchAnswers } from "../../lib/examService";
+import {
+  computeAttemptStats,
+  evaluateAnswer,
+  resolveScoreEarned,
+} from "../../lib/answerUtils";
 import { STAGES } from "../../data/stages";
 
 export default function AdminResultDetailPage() {
@@ -66,9 +71,36 @@ export default function AdminResultDetailPage() {
     );
   }
 
-  const correctCount = answers.filter((a) => a.is_correct).length;
-  const wrongCount = answers.filter((a) => !a.is_correct).length;
-  const unanswered = questions.length - answers.length;
+  // Compute statistics from the student's actual answer data.
+  // Supports all legacy formats: selected_choice_ids rows, old
+  // is_correct/score_earned-only rows, and attempts with no answer
+  // rows at all (stats derived from the stored score, never modified).
+  const stats = computeAttemptStats(
+    questions,
+    answers,
+    attempt ? Number(attempt.score) : null
+  );
+  const { correctAnswers, wrongAnswers, unanswered } = {
+    correctAnswers: stats.correct,
+    wrongAnswers: stats.wrong,
+    unanswered: stats.unanswered,
+  };
+
+  // Map of question_id -> answer row for per-question details
+  const answerMap = new Map();
+  answers.forEach((a) => answerMap.set(a.question_id, a));
+
+  const getQuestionResult = (question) => {
+    const evaluation = evaluateAnswer(answerMap.get(question.id), question);
+    return {
+      ...evaluation,
+      scoreEarned: resolveScoreEarned(
+        answerMap.get(question.id),
+        question,
+        evaluation
+      ),
+    };
+  };
 
   const formatDate = (dateStr) => {
     if (!dateStr) return "-";
@@ -125,11 +157,11 @@ export default function AdminResultDetailPage() {
             <p className="text-xs text-navy/50">النسبة المئوية</p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-extrabold text-success">{correctCount}</p>
+            <p className="text-2xl font-extrabold text-success">{correctAnswers}</p>
             <p className="text-xs text-navy/50">إجابات صحيحة</p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-extrabold text-error">{wrongCount}</p>
+            <p className="text-2xl font-extrabold text-error">{wrongAnswers}</p>
             <p className="text-xs text-navy/50">إجابات خاطئة</p>
           </div>
           <div className="text-center">
@@ -142,25 +174,32 @@ export default function AdminResultDetailPage() {
           <p>تاريخ التسليم: {formatDate(attempt.submitted_at)}</p>
           <p>طريقة التسليم: {attempt.status === "auto_submitted" ? "⏱️ تلقائي (انتهاء الوقت)" : "📤 يدوي"}</p>
         </div>
+
+        {stats.inferred && (
+          <div className="mt-3 rounded-xl bg-navy/5 px-4 py-3 text-xs font-bold text-navy/50">
+            ℹ️ هذه نتيجة قديمة لم تُحفظ لها إجابات تفصيلية، لذلك تم اشتقاق
+            الإحصائيات من الدرجة النهائية المحفوظة ({attempt.score}/{attempt.total_score})
+            دون أي تعديل عليها.
+          </div>
+        )}
       </div>
 
       {/* Questions & Answers */}
       <h2 className="mt-8 text-lg font-extrabold text-navy">📝 تفاصيل الإجابات</h2>
       <div className="mt-4 flex flex-col gap-4">
         {questions.map((q, qIndex) => {
-          const answer = answers.find((a) => a.question_id === q.id);
-          const selectedIds = answer?.selected_choice_ids || [];
-          const correctChoices = q.choices?.filter((c) => c.is_correct) || [];
+          const { answered, correct, selectedIds, scoreEarned } =
+            getQuestionResult(q);
 
           return (
             <div
               key={q.id}
               className={`rounded-2xl border p-5 shadow-sm backdrop-blur-lg ${
-                answer?.is_correct
-                  ? "border-success/30 bg-success/5"
-                  : answer
-                    ? "border-error/30 bg-error/5"
-                    : "border-navy/10 bg-white/70"
+                !answered
+                  ? "border-navy/10 bg-white/70"
+                  : correct
+                    ? "border-success/30 bg-success/5"
+                    : "border-error/30 bg-error/5"
               }`}
             >
               <div className="flex items-start justify-between">
@@ -172,9 +211,24 @@ export default function AdminResultDetailPage() {
                     <img src={q.image_url} alt="سؤال" className="mt-2 max-h-40 rounded-xl" />
                   )}
                 </div>
-                <span className="mr-4 rounded-full bg-navy/10 px-3 py-1 text-xs font-bold text-navy">
-                  {q.score} درجة
-                </span>
+                <div className="mr-4 flex flex-col items-end gap-2">
+                  <span className="rounded-full bg-navy/10 px-3 py-1 text-xs font-bold text-navy">
+                    {q.score} درجة
+                  </span>
+                  {!answered ? (
+                    <span className="rounded-full bg-navy/10 px-3 py-1 text-xs font-bold text-navy/50">
+                      بدون إجابة
+                    </span>
+                  ) : correct ? (
+                    <span className="rounded-full bg-success/20 px-3 py-1 text-xs font-bold text-success">
+                      ✅ صحيحة
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-error/20 px-3 py-1 text-xs font-bold text-error">
+                      ❌ خاطئة
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="mt-3 flex flex-col gap-1.5">
@@ -182,30 +236,45 @@ export default function AdminResultDetailPage() {
                   ?.sort((a, b) => a.sort_order - b.sort_order)
                   .map((c) => {
                     const isSelected = selectedIds.includes(c.id);
-                    const isCorrect = c.is_correct;
-                    let bgClass = "bg-white/80";
-                    if (isSelected && isCorrect) bgClass = "bg-success/20 border-success/40";
-                    else if (isSelected && !isCorrect) bgClass = "bg-error/20 border-error/40";
-                    else if (isCorrect) bgClass = "bg-success/10 border-success/20";
+                    const isCorrectChoice = c.is_correct;
+                    let bgClass = "bg-white/80 border-navy/10";
+                    if (isSelected && isCorrectChoice) bgClass = "bg-success/20 border-success/40";
+                    else if (isSelected && !isCorrectChoice) bgClass = "bg-error/20 border-error/40";
+                    else if (isCorrectChoice) bgClass = "bg-success/10 border-success/20";
 
                     return (
                       <div
                         key={c.id}
                         className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${bgClass}`}
                       >
-                        <span>{isSelected ? (isCorrect ? "✅" : "❌") : isCorrect ? "✅" : "⬜"}</span>
+                        <span>{isSelected ? (isCorrectChoice ? "✅" : "❌") : isCorrectChoice ? "🟢" : "⬜"}</span>
                         <span className={isSelected ? "font-bold" : ""}>{c.choice_text}</span>
-                        {isSelected && <span className="text-xs text-navy/50">(اختيار الطالب)</span>}
-                        {isCorrect && !isSelected && <span className="text-xs text-success">(الإجابة الصحيحة)</span>}
+                        {isSelected && (
+                          <span className="text-xs text-navy/50">(إجابة الطالب)</span>
+                        )}
+                        {isCorrectChoice && !isSelected && (
+                          <span className="text-xs font-bold text-success">(الإجابة الصحيحة)</span>
+                        )}
                       </div>
                     );
                   })}
               </div>
 
-              <div className="mt-2 text-xs text-navy/50">
-                {answer
-                  ? `الدرجة المكتسبة: ${answer.score_earned}/${q.score}`
-                  : "لم يتم الإجابة على هذا السؤال"}
+              <div className="mt-2 text-xs font-bold text-navy/60">
+                {!answered ? (
+                  <span>لم يتم الإجابة على هذا السؤال</span>
+                ) : (
+                  <span>
+                    إجابة الطالب:{" "}
+                    {selectedIds.length > 0
+                      ? q.choices
+                          ?.filter((c) => selectedIds.includes(c.id))
+                          .map((c) => c.choice_text)
+                          .join("، ")
+                      : "غير معروفة (بيانات قديمة)"}
+                    {" — "}الدرجة المكتسبة: {scoreEarned}/{q.score}
+                  </span>
+                )}
               </div>
             </div>
           );

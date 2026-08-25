@@ -4,9 +4,11 @@ import {
   fetchExamById,
   fetchQuestions,
   fetchAttempt,
+  fetchAnswers,
   saveAnswer,
   submitAttempt,
 } from "../../lib/examService";
+import { getSelectedChoiceIds } from "../../lib/answerUtils";
 
 export default function StudentExamTakePage() {
   const { examId, attemptId } = useParams();
@@ -47,15 +49,32 @@ export default function StudentExamTakePage() {
         setExam(examData);
         setQuestions(questionsData);
 
-        // Restore saved answers from localStorage
+        // استرجاع آخر إجابات محفوظة فعليًا:
+        // 1) من قاعدة البيانات (المصدر الدائم — saveAnswer لكل نقرة)
+        const restored = {};
+        try {
+          const dbAnswers = await fetchAnswers(attemptId);
+          for (const row of dbAnswers || []) {
+            const ids = getSelectedChoiceIds(row);
+            if (ids.length > 0) restored[row.question_id] = ids;
+          }
+        } catch (dbErr) {
+          console.error("Failed to restore answers from DB:", dbErr);
+        }
+
+        // 2) localStorage يعلو عليها (أحدث نسخة محلية إن وُجدت)
         const savedAnswers = localStorage.getItem(`exam_${examId}_answers_${attemptId}`);
         if (savedAnswers) {
           try {
-            setAnswers(JSON.parse(savedAnswers));
+            const parsed = JSON.parse(savedAnswers);
+            for (const [qid, ids] of Object.entries(parsed || {})) {
+              if (Array.isArray(ids)) restored[qid] = ids;
+            }
           } catch { /* ignore */ }
         }
+        if (Object.keys(restored).length > 0) setAnswers(restored);
 
-        // Calculate time left
+        // الوقت المتبقي من الوقت الحقيقي المحفوظ: started_at + المدة
         const startedAt = new Date(attemptData.started_at).getTime();
         const durationMs = examData.duration_minutes * 60 * 1000;
         const elapsed = Date.now() - startedAt;
@@ -109,7 +128,9 @@ export default function StudentExamTakePage() {
         setTimeout(() => setSaveStatus(""), 2000);
       } catch (err) {
         console.error("Failed to save answer:", err);
-        setSaveStatus("");
+        // Keep the answer locally; it will be retried on submit
+        setSaveStatus("error");
+        setTimeout(() => setSaveStatus(""), 4000);
       }
     },
     [examId, attemptId]
@@ -199,6 +220,9 @@ export default function StudentExamTakePage() {
             )}
             {saveStatus === "saved" && (
               <span className="text-xs text-success">✅ تم الحفظ</span>
+            )}
+            {saveStatus === "error" && (
+              <span className="text-xs text-error">⚠️ تعذر الحفظ على السيرفر</span>
             )}
             <div
               className={`rounded-xl px-4 py-2 text-lg font-extrabold ${

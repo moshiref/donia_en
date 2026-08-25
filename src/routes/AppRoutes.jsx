@@ -1,5 +1,9 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "../contexts/AuthContext";
+import {
+  StudentAuthProvider,
+  useStudentAuth,
+} from "../contexts/StudentAuthContext";
 import ProtectedRoute from "../components/ProtectedRoute";
 import AdminLayout from "../layouts/AdminLayout";
 
@@ -13,6 +17,7 @@ import ExamStartPlaceholderPage from "../pages/ExamStartPlaceholderPage";
 // Admin pages
 import AdminLoginPage from "../pages/admin/AdminLoginPage";
 import AdminDashboardPage from "../pages/admin/AdminDashboardPage";
+import AdminStudentsPage from "../pages/admin/AdminStudentsPage";
 import AdminExamsPage from "../pages/admin/AdminExamsPage";
 import AdminExamFormPage from "../pages/admin/AdminExamFormPage";
 import AdminExamPreviewPage from "../pages/admin/AdminExamPreviewPage";
@@ -22,18 +27,30 @@ import AdminTopStudentsPage from "../pages/admin/AdminTopStudentsPage";
 import AdminSettingsPage from "../pages/admin/AdminSettingsPage";
 
 // Student pages
-import StudentHomePage from "../pages/student/StudentHomePage";
+import StudentLoginPage from "../pages/student/StudentLoginPage";
+import StudentDashboardPage from "../pages/student/StudentDashboardPage";
 import StudentExamsPage from "../pages/student/StudentExamsPage";
 import StudentExamStartPage from "../pages/student/StudentExamStartPage";
 import StudentExamTakePage from "../pages/student/StudentExamTakePage";
 import StudentExamResultPage from "../pages/student/StudentExamResultPage";
 
+// بوابة دخول الطالب: أول واجهة للمنصة هي تسجيل الدخول بالكود مباشرة.
+// طالب مسجل مسبقًا → يدخل داشبورده مباشرة بدون إعادة إدخال الكود.
+function StudentEntryGate() {
+  const { student } = useStudentAuth();
+  if (student) return <Navigate to="/dashboard" replace />;
+  return <StudentLoginPage />;
+}
+
 export default function AppRoutes() {
   return (
     <AuthProvider>
+      <StudentAuthProvider>
       <Routes>
-        {/* Student Routes (Public) */}
-        <Route path="/" element={<StudentHomePage />} />
+        {/* Student Flow: الدخول بالكود مباشرة → Dashboard */}
+        <Route path="/" element={<StudentEntryGate />} />
+        <Route path="/login" element={<StudentEntryGate />} />
+        <Route path="/dashboard" element={<StudentDashboardPage />} />
         <Route path="/exams/:stageId/:gradeId" element={<StudentExamsPage />} />
         <Route path="/exam/:examId/start" element={<StudentExamStartPage />} />
         <Route path="/exam/:examId/take/:attemptId" element={<StudentExamTakePage />} />
@@ -52,6 +69,7 @@ export default function AppRoutes() {
           }
         >
           <Route index element={<AdminDashboardPage />} />
+          <Route path="students" element={<AdminStudentsPage />} />
           <Route path="exams" element={<AdminExamsPage />} />
           <Route path="exams/new" element={<AdminExamFormPage />} />
           <Route path="exams/:id/edit" element={<AdminExamFormPage />} />
@@ -69,6 +87,7 @@ export default function AppRoutes() {
         <Route path="/old-exam/:stage" element={<ExamEntryPage />} />
         <Route path="/old-exam/:stage/start" element={<ExamStartPlaceholderPage />} />
       </Routes>
+      </StudentAuthProvider>
     </AuthProvider>
   );
 }
